@@ -1,0 +1,20 @@
+pandas>=2.0
+openpyxl>=3.1
+pypdf>=4.0
+cryptography>=42
+requests>=2.31
+msal>=1.28
+PyYAML>=6.0
+keyring>=25
+pywinauto>=0.6.8; sys_platform == "win32"
+Pillow>=10; sys_platform == "win32"
+numpy>=1.26; sys_platform == "win32"
+# OCR de Windows (lee la grilla de Ingresos de la pantalla; ver rpa/hosvital/vision.py)
+winrt-runtime>=3.2; sys_platform == "win32"
+winrt-Windows.Foundation>=3.2; sys_platform == "win32"
+winrt-Windows.Foundation.Collections>=3.2; sys_platform == "win32"
+winrt-Windows.Globalization>=3.2; sys_platform == "win32"
+winrt-Windows.Graphics.Imaging>=3.2; sys_platform == "win32"
+winrt-Windows.Media.Ocr>=3.2; sys_platform == "win32"
+winrt-Windows.Storage.Streams>=3.2; sys_platform == "win32"
+pytest>=8

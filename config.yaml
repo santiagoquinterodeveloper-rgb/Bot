@@ -1,0 +1,151 @@
+# ============================================================
+#  Configuración del RPA Hosvital  (editar solo este archivo)
+# ============================================================
+
+paths:
+  input_excel: input/CITAS.xlsx      # el Excel del día (también se puede pasar con --excel)
+  reports_dir: 'C:\reportes'         # carpeta donde Hosvital deja los PDF
+  work_dir: work                     # staging, cuarentena, capturas (se borra al terminar)
+  db_path: work/rpa.sqlite           # auditoría (NO se borra)
+  audit_dir: auditoria               # reportes de auditoría en Excel (NO se borran)
+
+# ---------- Reglas del Excel (se aplican en código, no con el filtro de Excel) ----------
+filters:
+  estados: [ATENDIDA, FACTURADA]
+  # Lista BLANCA: una especialidad que no esté aquí se omite y queda en la auditoría.
+  especialidades:
+    - CIRUGIA GENERAL
+    - CIRUGIA MAXILOFACIAL
+    - CIRUGIA PLASTICA Y ESTETICA
+    - GINECOLOGIA Y OBSTETRICIA
+    - ORTOPEDIA Y TRAUMATOLOGIA
+    - UROLOGIA
+  skip_if_bad_email: true            # sin correo válido no tiene sentido descargar
+
+# tdoc del Excel -> texto del combo "Tipo de documento" de Hosvital.
+# CC y TI están confirmados; los demás hay que verificarlos (tools/list_combo_items.py).
+tipos_documento:
+  AS: ADULTO SIN IDENTIFICAR
+  CC: CEDULA DE CIUDADANIA
+  CE: CEDULA DE EXTRANJERIA
+  CN: CERTIFICADO DE NACIDO VIVO
+  DE: DOCUMENTO EXTRANJERO       
+  MS: MENOR SIN IDENTIFICAR
+  NIT: NIT
+  PA: PASAPORTE
+  PE: PERMISO ESPECIAL DE PERMANENCIA
+  PT: PERMISO DE PROTECCION TEMPORAL
+  RC: REGISTRO CIVIL
+  SC: SALVOCONDUCTO
+  TI: TARJETA DE IDENTIDAD
+
+# ---------- Documentos a descargar, en este orden ----------
+documentos:
+  - {key: HC,  listbox: RANGO DE FOLIOS,  prefijo: RHsClxFo, archivo: Historia_clinica, folio_dialog: false, obligatorio: true}
+  - {key: INC, listbox: INCAPACIDADES,    prefijo: RIncAfi,  archivo: Incapacidad,      folio_dialog: false, obligatorio: false}
+  - {key: FOR, listbox: FORMULACION,      prefijo: RForSuAm, archivo: Formulacion,     folio_dialog: true,  obligatorio: false}
+  - {key: ORD, listbox: ORDENES MEDICAS,  prefijo: ROrmed,   archivo: Ordenes_medicas, folio_dialog: true,  obligatorio: false}
+
+verificacion:
+  # El PDF debe contener el documento del paciente (confirmado con Ctrl+F).
+  requerir_documento_en_pdf: true
+
+# ---------- Hosvital ----------
+hosvital:
+  launch_command: 'C:\HCWeb-acceso-directo\HosVital.lnk' # ruta al .exe o al acceso directo .lnk de Hosvital (OBLIGATORIO)
+  user_keyring_name: hosvital        # usuario/clave se guardan con: python -m rpa set-secret hosvital
+  username: '83254628'                       # usuario de Hosvital (la clave va en keyring)
+  main_title_regex: '^7J\.0 .HOSVITAL.$'
+  session_max_minutes: 330           # reinicio planificado antes de las 6 h
+  proactive_restart: true
+  keys_mode: silent                  # silent | focus  (si las flechas no mueven la grilla, usar focus)
+  click_mode: message                # message (sin mouse) | input (mouse real, si click() no responde)
+  timeouts:
+    dialog: 20                       # esperar apertura de ventanas (s)
+    report: 60                       # esperar un PDF tras dar check (s)
+    launch: 90
+  edge_wait_seconds: 5               # tiempo máximo esperando a que Edge abra el PDF para cerrarlo
+  # Posiciones (relativas a la esquina superior izquierda de la ventana). Se verifican con
+  # tolerancia; si la app cambia de diseño el bot se detiene en vez de hacer clic a ciegas.
+  layout:
+    tolerance: 12
+    menu_principal_sis: [550, 518, 677, 597]        # botón "Sistema de Información en Salud"
+    menu_sis_gestion: [841, 190, 994, 215]          # botón "Gestión Asistencial"
+    gestion_resumen: [123, 465, 280, 496]           # botón "Resumen de Historia"
+  max_ingresos_a_revisar: 40
+  max_folios_por_documento: 20
+  folio_load_seconds: 2              # espera a que 'Seleccionar Folio' cargue su grilla antes de darla por vacía
+
+# ---------- Correo (Microsoft Graph) ----------
+mail:
+  dry_run: true                      # ¡dejar en true hasta validar! No envía nada de verdad.
+  tenant_id: '27f0b56c-87a1-4b3b-8a69-e5acc1d746a3'
+  client_id: '6a70b848-c6ea-40af-a340-d66fc61a9450'
+  sender: 'tuhistoria@clinicantioquia.com.co' # buzón emisor, p. ej. historias@clinica.com
+  auth: secret                       # secret | certificate
+  certificate_path: ''               # si auth = certificate (PEM con clave privada)
+  certificate_thumbprint: ''
+  send_interval_seconds: 3           # ~20 correos/min
+  max_retries: 4
+  timeout_seconds: 60
+  subject: 'Documentos clínicos - Atención del {fecha}'
+  
+  body_html: |
+    <meta name="color-scheme" content="light dark">
+    <div style="display:none;max-height:0;overflow:hidden;opacity:0;">Sus documentos clínicos están adjuntos a este correo.</div>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#e9eef3" style="background-color:#e9eef3;">
+      <tr><td align="center" style="padding:24px 12px;">
+        <table role="presentation" width="600" cellpadding="0" cellspacing="0" border="0" bgcolor="#ffffff" style="width:100%;max-width:600px;background-color:#ffffff;border-radius:12px;">
+          <tr>
+            <td style="padding:28px 28px 8px 28px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
+                <td align="left" valign="middle"><img src="cid:logo" alt="Clínica Antioquia" height="52" style="display:block;height:52px;width:auto;border:0;"></td>
+                <td align="right" valign="middle"><img src="cid:icon" alt="" height="40" style="display:block;height:40px;width:auto;border:0;"></td>
+              </tr></table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 28px 0 28px;font-family:Arial,Helvetica,sans-serif;">
+              <h1 style="margin:0 0 14px 0;font-size:26px;line-height:32px;font-weight:bold;color:#003085;">Tus documentos están disponibles (PRUEBA)</h1>
+              <p style="margin:0 0 12px 0;font-size:15px;line-height:24px;color:#1d2b38;">Cordial saludo, {nombre}.</p>
+              <p style="margin:0 0 12px 0;font-size:15px;line-height:24px;color:#1d2b38;">Adjuntamos los documentos clínicos de su atención del <b>{fecha}</b>.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:8px 28px 8px 28px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" bgcolor="#f1f7fc" style="background-color:#f1f7fc;border:1px solid #d6e1ec;border-radius:10px;">
+                <tr><td style="padding:16px 18px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#003085;">
+                  <b>Archivos protegidos con contraseña.</b><br>
+                  <span style="color:#1d2b38;">Use su <b>número de documento de identidad</b> (sin puntos ni espacios) para abrirlos.</span>
+                </td></tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:16px 28px 8px 28px;font-family:Arial,Helvetica,sans-serif;font-size:14px;line-height:22px;color:#1d2b38;">
+              En Clínica Antioquia S.A. estamos comprometidos con el medio ambiente, por eso recuerda imprimir solo lo necesario para ayudar a cuidar nuestro planeta.
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:20px 28px 0 28px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr><td height="1" bgcolor="#d6e1ec" style="height:1px;line-height:1px;font-size:1px;background-color:#d6e1ec;">&nbsp;</td></tr></table></td>
+          </tr>
+          <tr>
+            <td align="center" style="padding:20px 28px 28px 28px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:18px;color:#4d6372;">
+              <p style="margin:0 0 6px 0;font-size:13px;font-weight:bold;color:#003085;">Este mensaje se generó automáticamente; por favor no responda a este correo.</p>
+              <p style="margin:0;"><i style="color:#45a1e6;font-weight:bold;">Juntos construimos tu bienestar</i><br>Clínica Antioquia S.A.</p>
+            </td>
+          </tr>
+        </table>
+      </td></tr>
+    </table>
+
+# ---------- Ejecución ----------
+run:
+  max_attempts_per_patient: 2
+  max_consecutive_errors: 5          # si fallan 5 pacientes seguidos se detiene la corrida
+  screenshot_on_error: true
+
+cleanup:
+  delete_files_after_send: true      # borra PDFs/carpetas de los pacientes ENVIADOS
+  purge_quarantine: true
+  delete_input_excel: false          # el Excel de entrada lo gestionas tú

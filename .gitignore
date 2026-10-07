@@ -1,0 +1,9 @@
+work/
+auditoria/
+input/*.xlsx
+*.sqlite*
+dump_*.txt
+dump_*.png
+__pycache__/
+.pytest_cache/
+.venv/

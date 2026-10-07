@@ -1,0 +1,27 @@
+# ============================================================
+#  ENTORNO DE PRUEBA
+#  Hereda TODO de ..\config.yaml (producción) y solo cambia lo de abajo, así que cualquier ajuste
+#  de producción (filtros, layout de Hosvital, plantilla del correo) aplica también aquí.
+#
+#  Uso (--config va ANTES del subcomando):
+#    python -m rpa --config prueba\config_prueba.yaml run                 # simulado
+#    python -m rpa --config prueba\config_prueba.yaml run --real          # envío real a los buzones del Excel de prueba
+#    python -m rpa --config prueba\config_prueba.yaml reset-db            # vaciar la BD de prueba a mano
+#
+#  Las rutas de abajo son relativas a ESTA carpeta (prueba\).
+# ============================================================
+extends: ../config.yaml
+
+# Marca el entorno como desechable: tras un envío real (--real) la BD de prueba y las carpetas temporales
+# se vacían solas, y se habilita `reset-db`. NUNCA poner esto en config.yaml (borraría la auditoría real,
+# que es la que impide reenviar un ingreso ya enviado).
+entorno: prueba
+
+paths:
+  input_excel: CITAS_PRUEBA_ENVIO.xlsx   # Excel con correos de buzones internos (ver tools\crear_excel_prueba.py)
+  work_dir: work                         # staging, cuarentena y capturas de la prueba
+  db_path: rpa_prueba.sqlite             # BD de PRUEBA, separada de work\rpa.sqlite
+  audit_dir: auditoria                   # Excel de auditoría de PRUEBA, separado de auditoria\
+
+mail:
+  dry_run: true                          # simulado por defecto; el envío real se pide con --real

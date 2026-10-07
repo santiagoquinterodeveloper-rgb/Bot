@@ -20,6 +20,8 @@ Excel → filtros (estado/especialidad/correo) → [por paciente en Hosvital]
 | Driver de Hosvital | Implementado y probado **contra un Hosvital simulado** con la geometría de tus volcados. **Falta validarlo en la máquina real** (ver más abajo) |
 | Correo | Arranca en **modo simulación** (`mail.dry_run: true`): no envía nada hasta que lo cambies |
 
+> **Puesta en marcha** de los ambientes de prueba y producción: ver [`GUIA_PUESTA_EN_MARCHA.md`](GUIA_PUESTA_EN_MARCHA.md).
+
 ## Instalación (Windows, en la máquina del bot)
 
 ```powershell
@@ -88,7 +90,7 @@ Las filas del Excel omitidas (estado/especialidad/correo inválido, etc.) quedan
 motivo. Los correos con dominio sospechoso (`gmal.com`) se omiten y **no se corrigen**: enviar historias clínicas a
 una dirección adivinada es un riesgo.
 
-## Microsoft Graph (pedir a TI)
+## Microsoft Graph
 
 1. Registrar una aplicación en Microsoft Entra ID (single tenant).
 2. Permiso de **aplicación** `Mail.Send` con consentimiento de administrador (opcional `Mail.Read` si luego se
@@ -151,7 +153,8 @@ confirman con Hosvital real. Cada uno tiene un interruptor en `config.yaml` o un
 ## Estructura
 
 ```
-config.yaml              reglas y parámetros
+config.yaml              reglas y parámetros (PRODUCCIÓN)
+prueba/                  ambiente de prueba: config_prueba.yaml (hereda de config.yaml), Excel de prueba, BD y auditoría propias
 rpa/excel_loader.py      Excel + filtros + dedupe + validación de correo
 rpa/db.py                auditoría y reanudación (SQLite)
 rpa/orchestrator.py      preparar → descargar → enviar → limpiar
@@ -164,4 +167,5 @@ rpa/hosvital/vision.py   OCR de la grilla de Ingresos y recuadro de foco (Window
 tests/                   pruebas (incluye un Hosvital simulado: tests/fake_hosvital.py)
 tools/dump_ui.py         volcado de controles de la ventana al frente
 tools/probe_grid.py      prueba de lectura/movimiento en grillas
+tools/crear_excel_prueba.py  genera el Excel de prueba (correos de buzones internos) desde el Excel diario
 ```

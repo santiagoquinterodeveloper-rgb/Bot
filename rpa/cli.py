@@ -67,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("audit", "cleanup"):
         sp = sub.add_parser(name)
         sp.add_argument("--run", type=int)
+    sub.add_parser("reset-db", help="vacía la BD de PRUEBA (solo con 'entorno: prueba')")
     sp = sub.add_parser("set-secret", help="guarda un secreto en el Administrador de credenciales de Windows")
     sp.add_argument("name", help="p. ej. hosvital_password o graph_client_secret")
     args = p.parse_args(argv)
@@ -103,6 +104,16 @@ def main(argv: list[str] | None = None) -> int:
             if not orch.mailer.dry_run:
                 orch.cleanup(run_id)
                 db.finish_run(run_id)
+                if cfg.get("entorno", "produccion") == "prueba":
+                    orch.reset_test_env()
+                    _log("Entorno de prueba: BD y carpetas de trabajo vaciadas (la auditoría en Excel se conserva)")
+        elif args.cmd == "reset-db":
+            cfg, db, orch = _build(args, False, False)
+            try:
+                orch.reset_test_env()
+            except RuntimeError as e:
+                raise SystemExit(str(e))
+            print("BD y carpetas de trabajo de prueba vaciadas.")
     except RunAborted as e:
         _log(f"CORRIDA DETENIDA: {e}")
         return 2

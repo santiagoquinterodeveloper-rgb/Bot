@@ -702,12 +702,14 @@ class HosvitalDriver:
         return "TIMEOUT", None
 
     def _take_pdf(self, doc: DocType, pdf: Path, dest: Path) -> str | None:
-        """Copia el PDF a su carpeta, cierra el visor y limpia C:\\reportes. Devuelve un error o None."""
-        tipo = self.reports.classify(pdf)
-        if tipo != doc.key:
-            self._close_pdf_viewers(2)
-            self.reports.sweep()
-            return f"archivo inesperado '{pdf.name}' (se esperaba prefijo {doc.prefijo})"
+        """Copia el PDF a su carpeta, cierra el visor y limpia C:\\reportes. Devuelve un error o None.
+
+        El nombre del archivo no se valida contra `doc.prefijo`: Hosvital no siempre nombra el PDF
+        con el prefijo esperado (p. ej. ÓRDENES MÉDICAS generando 'RRslInter*.pdf' según la especialidad)
+        y en ese momento ya es, sin ambigüedad, el único PDF nuevo y estable tras pedir este documento.
+        """
+        if self.reports.classify(pdf) != doc.key:
+            self.log(f"Aviso: '{pdf.name}' no tiene el prefijo esperado ({doc.prefijo}) para {doc.key}; se toma igual")
         ReportsDir.take(pdf, dest)
         self._close_pdf_viewers(float(self.cfg.get("hosvital.edge_wait_seconds", 5)))
         self.reports.sweep()

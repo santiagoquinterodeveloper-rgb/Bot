@@ -7,3 +7,7 @@ dump_*.png
 __pycache__/
 .pytest_cache/
 .venv/
+# entorno de prueba: el Excel trae documentos y nombres reales
+prueba/*.xlsx
+prueba/work/
+prueba/auditoria/

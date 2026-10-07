@@ -230,6 +230,18 @@ class Orchestrator:
         return False
 
     # ---------- 4) limpiar ----------
+    def reset_test_env(self) -> None:
+        """Entorno de prueba: vacía la BD y las carpetas temporales para repetir con los mismos pacientes.
+
+        Solo con `entorno: prueba`; así ni una orden manual puede borrar la auditoría de producción, que es
+        la que impide reenviar un ingreso ya enviado. La auditoría en Excel no se toca.
+        """
+        if self.cfg.get("entorno", "produccion") != "prueba":
+            raise RuntimeError("reset-db solo se permite con 'entorno: prueba' en la configuración")
+        self.db.reset()
+        for sub in ("staging", "quarantine", "screens"):
+            shutil.rmtree(self.work() / sub, ignore_errors=True)
+
     def cleanup(self, run_id: int) -> dict:
         borrados, conservados = 0, 0
         if self.cfg.get("cleanup.delete_files_after_send", True):

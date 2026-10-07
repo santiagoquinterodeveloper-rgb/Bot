@@ -5,8 +5,12 @@ para descargar los documentos clínicos de cada paciente del Excel diario, prote
 paciente) y enviarlos por Microsoft Graph. Lee `README.md` para el flujo, estados y operación.
 
 ## Cómo trabajar aquí
-- Windows. Entorno: `.venv`. Pruebas: `python -m pytest -q` (58 deben pasar; usan un Hosvital simulado en `tests/fake_hosvital.py`).
+- Windows. Entorno: `.venv`. Pruebas: `python -m pytest -q` (66 deben pasar; usan un Hosvital simulado en `tests/fake_hosvital.py`).
 - Correr: `python -m rpa run --excel input\CITAS.xlsx` (correo en `dry_run: true`; nunca enviar real sin que el usuario lo pida).
+- Ambiente de prueba separado en `prueba/` (`python -m rpa --config prueba\config_prueba.yaml run [--real]`; `--config` va antes del
+  subcomando). Hereda de `config.yaml` (`extends`), usa su propia BD y, con `entorno: prueba`, vacía la BD tras un envío real
+  (`reset-db` a mano). Detalle en `GUIA_PUESTA_EN_MARCHA.md`. Nunca poner `entorno: prueba` en `config.yaml`.
+- La validación de prefijo del nombre del PDF se relajó: `_take_pdf` acepta cualquier nombre (solo avisa).
 - Si una corrida falla, los pacientes quedan en `ERROR_DESCARGA` y NO se reintentan solos: `python reset.py` los devuelve a PENDIENTE.
 - Herramientas de diagnóstico: `python tools\dump_ui.py <nombre>` (volcado de controles de la ventana al frente; da 8 s para
   hacer clic en su barra de título) y `tools\probe_grid.py`.

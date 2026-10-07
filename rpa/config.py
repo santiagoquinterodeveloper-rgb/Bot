@@ -61,10 +61,22 @@ class Config:
         return {d.prefijo: d.key for d in self.docs}
 
 
+def _read_yaml(path: Path, _seen: tuple[Path, ...] = ()) -> dict:
+    """Lee un YAML; si trae `extends: <otro.yaml>` (ruta relativa a este archivo) parte de ese y le superpone el actual."""
+    path = path.resolve()
+    if path in _seen:
+        raise ValueError(f"'extends' circular en {path}")
+    with open(path, encoding="utf-8") as f:
+        raw = yaml.safe_load(f) or {}
+    parent = raw.pop("extends", None)
+    if parent:
+        return _deep_merge(_read_yaml(path.parent / parent, (*_seen, path)), raw)
+    return raw
+
+
 def load_config(path: str | Path = "config.yaml", overrides: dict | None = None) -> Config:
     path = Path(path)
-    with open(path, encoding="utf-8") as f:
-        raw = yaml.safe_load(f)
+    raw = _read_yaml(path)
     if overrides:
         raw = _deep_merge(raw, overrides)
     return Config(raw, path.resolve().parent)

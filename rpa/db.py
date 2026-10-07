@@ -47,6 +47,14 @@ class AuditDB:
     def close(self) -> None:
         self.conn.close()
 
+    def reset(self) -> None:
+        """Vacía TODAS las tablas (solo para el entorno de prueba) y compacta el archivo."""
+        for table in ("events", "skipped", "emails", "documents", "jobs", "runs"):
+            self.conn.execute(f"DELETE FROM {table}")
+        self.conn.commit()
+        self.conn.execute("PRAGMA wal_checkpoint(TRUNCATE)")
+        self.conn.execute("VACUUM")
+
     # ---- corridas ----
     def open_run(self, fecha: str, excel_sha: str, excel_name: str) -> tuple[int, bool]:
         row = self.conn.execute(

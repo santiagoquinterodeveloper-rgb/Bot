@@ -106,7 +106,7 @@ mail:
           </tr>
           <tr>
             <td style="padding:20px 28px 0 28px;font-family:Arial,Helvetica,sans-serif;">
-              <h1 style="margin:0 0 14px 0;font-size:26px;line-height:32px;font-weight:bold;color:#003085;">Tus documentos están disponibles (PRUEBA)</h1>
+              <h1 style="margin:0 0 14px 0;font-size:26px;line-height:32px;font-weight:bold;color:#003085;">Tus documentos clínicos están disponibles</h1>
               <p style="margin:0 0 12px 0;font-size:15px;line-height:24px;color:#1d2b38;">Cordial saludo, {nombre}.</p>
               <p style="margin:0 0 12px 0;font-size:15px;line-height:24px;color:#1d2b38;">Adjuntamos los documentos clínicos de su atención del <b>{fecha}</b>.</p>
             </td>

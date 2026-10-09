@@ -192,12 +192,18 @@ class Orchestrator:
             return False
         enc_dir = self.job_dir(run_id, row) / "enc"
         por_tipo = Counter(d["tipo"] for d in docs)
+        nombres_usados: dict[str, int] = {}
         adjuntos: list[tuple[str, bytes]] = []
         try:
             for d in docs:
                 base = self.cfg.doc_by_key(d["tipo"]).archivo
                 if por_tipo[d["tipo"]] > 1 and d["folio"]:
                     base += f"_folio{d['folio']}"
+                # Varios PDFs del MISMO check (p. ej. ÓRDENES con dos reportes para el mismo folio):
+                # el staging los distingue por sufijo (_2, _3); aquí se replica para no sobreescribirlos.
+                nombres_usados[base] = nombres_usados.get(base, 0) + 1
+                if nombres_usados[base] > 1:
+                    base = f"{base}_{nombres_usados[base]}"
                 dst = enc_dir / f"{base}.pdf"
                 encrypt_pdf(Path(d["archivo"]), dst, row["documento"])
                 adjuntos.append((dst.name, dst.read_bytes()))

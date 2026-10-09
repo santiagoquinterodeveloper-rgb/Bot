@@ -105,8 +105,9 @@ class Ctrl:
 class FakeHosvital:
     def __init__(self, reports_dir: Path, patients: dict, silent_arrows=True, folio_closes=False,
                  running=True, password="clave", expire_after_pdfs: int | None = None, ocr_blank=False,
-                 rango_abre_otro=False, folio_slow_polls=0):
+                 rango_abre_otro=False, folio_slow_polls=0, pdfs_por_check: int = 1):
         self.folio_slow_polls = folio_slow_polls   # lecturas de la grilla de folios que salen vacías antes de cargar
+        self.pdfs_por_check = pdfs_por_check       # algunos documentos emiten >1 PDF por un mismo check
         self.reports, self.patients = Path(reports_dir), patients
         self.silent_arrows, self.folio_closes, self.running = silent_arrows, folio_closes, running
         self.password, self.expire_after_pdfs, self.pdfs_made = password, expire_after_pdfs, 0
@@ -320,10 +321,12 @@ class FakeHosvital:
         item = lb.items[lb.sel].strip()
         doc, ing = self.current["doc"], self.ingreso
         if item == "RANGO DE FOLIOS":
-            self._write_pdf("RHsClxFo", f"Historia clinica CC {doc}")
+            for _ in range(max(1, self.pdfs_por_check)):
+                self._write_pdf("RHsClxFo", f"Historia clinica CC {doc}")
         elif item == "INCAPACIDADES":
             if ing.get("inc"):
-                self._write_pdf("RIncAfi", f"Incapacidad CC {doc}")
+                for _ in range(max(1, self.pdfs_por_check)):
+                    self._write_pdf("RIncAfi", f"Incapacidad CC {doc}")
             else:
                 self._message("Debe seleccionar un Registro de Incapacidad")
         elif item in ("FORMULACION", "ORDENES MEDICAS"):
@@ -356,7 +359,8 @@ class FakeHosvital:
             if not grid.rows:
                 return                                   # grilla vacía: no pasa nada
             f = grid.rows[grid.cur][3]
-            self._write_pdf(prefix, f"{texto} folio {f}")
+            for _ in range(max(1, self.pdfs_por_check)):   # un mismo check puede emitir varios reportes
+                self._write_pdf(prefix, f"{texto} folio {f}")
             if self.folio_closes:
                 self._pop(d)
         self._icon(c, o, (534, 443, 563, 472), lambda: None)

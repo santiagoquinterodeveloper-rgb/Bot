@@ -26,6 +26,7 @@ from pywinauto import Desktop
 
 from ..config import Config, DocType
 from ..excel_loader import JobSpec
+from ..pdf_tools import has_pdf_markers
 from ..reports import ReportsDir
 from ..secrets_store import get_secret
 from ..text import alnum, norm
@@ -700,19 +701,79 @@ class HosvitalDriver:
             self._sleep(0.3)
         return "TIMEOUT", None
 
-    def _take_pdf(self, doc: DocType, pdf: Path, dest: Path) -> str | None:
-        """Copia el PDF a su carpeta, cierra el visor y limpia C:\\reportes. Devuelve un error o None.
+    def _pending_pdfs(self, seen: set[str]) -> list[Path]:
+        """PDFs estables en C:\\reportes cuyo nombre todavía no se tomó."""
+        out: list[Path] = []
+        for p in self.reports.list_pdfs():
+            if p.name in seen:
+                continue
+            try:
+                s1 = p.stat().st_size
+            except OSError:
+                continue
+            self._sleep(0.3)
+            try:
+                s2 = p.stat().st_size
+            except OSError:
+                continue
+            if s1 == s2 and s1 > 0 and has_pdf_markers(p):
+                out.append(p)
+        return out
 
-        El nombre del archivo no se valida contra `doc.prefijo`: Hosvital no siempre nombra el PDF
-        con el prefijo esperado (p. ej. ÓRDENES MÉDICAS generando 'RRslInter*.pdf' según la especialidad)
-        y en ese momento ya es, sin ambigüedad, el único PDF nuevo y estable tras pedir este documento.
+    def _take_all_pdfs(self, doc: DocType, first_pdf: Path, outdir: Path,
+                       folio: str | None = None) -> tuple[list[tuple[Path, str | None]], str | None]:
+        """Copia a `outdir` el primer PDF y cualquier otro que Hosvital genere para el MISMO check.
+
+        Un solo check puede producir varios reportes (p. ej. ÓRDENES MÉDICAS con varias órdenes para
+        un folio); antes solo se tomaba el primero y los demás quedaban en cuarentena al barrer. El
+        primero conserva el nombre base (`HC.pdf`, `ORD_71.pdf`); los siguientes llevan sufijo `_2`,
+        `_3`... (`ORD_71_2.pdf`). El nombre del origen no se valida contra `doc.prefijo`: Hosvital
+        no siempre nombra el PDF con el prefijo esperado (p. ej. 'RRslInter*.pdf' en ÓRDENES).
+
+        Devuelve (archivos, None) o (archivos_parciales, error).
         """
-        if self.reports.classify(pdf) != doc.key:
-            self.log(f"Aviso: '{pdf.name}' no tiene el prefijo esperado ({doc.prefijo}) para {doc.key}; se toma igual")
-        ReportsDir.take(pdf, dest)
-        self._close_pdf_viewers(float(self.cfg.get("hosvital.edge_wait_seconds", 5)))
-        self.reports.sweep()
-        return None
+        quiescence = float(self.cfg.get("hosvital.multi_pdf_quiescence_seconds", 3.0))
+        base = doc.key if folio is None else f"{doc.key}_{folio}"
+        archivos: list[tuple[Path, str | None]] = []
+        seen: set[str] = set()
+
+        def _take(pdf: Path) -> str | None:
+            suffix = f"_{len(archivos) + 1}" if archivos else ""
+            dest = outdir / f"{base}{suffix}.pdf"
+            if self.reports.classify(pdf) != doc.key:
+                self.log(f"Aviso: '{pdf.name}' no tiene el prefijo esperado ({doc.prefijo}) "
+                         f"para {doc.key}; se toma igual")
+            try:
+                ReportsDir.take(pdf, dest)
+            except OSError as e:
+                return str(e)
+            archivos.append((dest, folio))
+            seen.add(pdf.name)
+            return None
+
+        def _cleanup() -> None:
+            self._close_pdf_viewers(float(self.cfg.get("hosvital.edge_wait_seconds", 5)))
+            self.reports.sweep()
+
+        err = _take(first_pdf)
+        if err:
+            _cleanup()
+            return archivos, err
+
+        last_new = time.monotonic()
+        while time.monotonic() - last_new < quiescence:
+            self._sleep(0.3)
+            for p in self._pending_pdfs(seen):
+                err = _take(p)
+                if err:
+                    _cleanup()
+                    return archivos, err
+                last_new = time.monotonic()
+
+        if len(archivos) > 1:
+            self.log(f"{doc.key}: Hosvital generó {len(archivos)} PDFs en un mismo check; todos van al staging")
+        _cleanup()
+        return archivos, None
 
     def _download_doc(self, doc: DocType, outdir: Path) -> DocResult:
         rango = self._dialog("RANGO")
@@ -728,9 +789,10 @@ class HosvitalDriver:
 
         kind, payload = self._wait_result(self.t_report, allow_folio=False)
         if kind == "PDF":
-            dest = outdir / f"{doc.key}.pdf"
-            err = self._take_pdf(doc, payload, dest)  # type: ignore[arg-type]
-            return DocResult(doc.key, "ERROR", detalle=err) if err else DocResult(doc.key, "DESCARGADO", [(dest, None)])
+            archivos, err = self._take_all_pdfs(doc, payload, outdir)  # type: ignore[arg-type]
+            if err:
+                return DocResult(doc.key, "ERROR", archivos, detalle=err)
+            return DocResult(doc.key, "DESCARGADO", archivos)
         if kind == "MENSAJE":
             texto = str(payload)
             self._dismiss_message()
@@ -757,9 +819,10 @@ class HosvitalDriver:
             self._dismiss_message()
             return DocResult(doc.key, "ERROR", detalle=f"mensaje de Hosvital: {texto}")
         if kind == "PDF":                                   # Hosvital descargó directo, sin diálogo
-            dest = outdir / f"{doc.key}.pdf"
-            err = self._take_pdf(doc, payload, dest)        # type: ignore[arg-type]
-            return DocResult(doc.key, "ERROR", detalle=err) if err else DocResult(doc.key, "DESCARGADO", [(dest, None)])
+            archivos, err = self._take_all_pdfs(doc, payload, outdir)   # type: ignore[arg-type]
+            if err:
+                return DocResult(doc.key, "ERROR", archivos, detalle=err)
+            return DocResult(doc.key, "DESCARGADO", archivos)
         if kind != "FOLIO":
             return DocResult(doc.key, "ERROR", detalle="No se abrió 'Seleccionar Folio'")
 
@@ -800,11 +863,10 @@ class HosvitalDriver:
                 if k2 == "MENSAJE":
                     self._dismiss_message()
                 return DocResult(doc.key, "ERROR", detalle=f"folio {row.numero}: {p2 if k2 == 'MENSAJE' else 'sin PDF a tiempo'}")
-            dest = outdir / f"{doc.key}_{row.numero}.pdf"
-            err = self._take_pdf(doc, p2, dest)             # type: ignore[arg-type]
+            nuevos, err = self._take_all_pdfs(doc, p2, outdir, folio=row.numero)  # type: ignore[arg-type]
+            archivos.extend(nuevos)
             if err:
-                return DocResult(doc.key, "ERROR", detalle=f"folio {row.numero}: {err}")
-            archivos.append((dest, row.numero))
+                return DocResult(doc.key, "ERROR", archivos, detalle=f"folio {row.numero}: {err}")
 
         if self.state() == "FOLIO":
             self._click(self._cancel_btn(self._dialog("FOLIO")))

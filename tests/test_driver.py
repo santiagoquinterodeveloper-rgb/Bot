@@ -231,3 +231,33 @@ def test_seleccionar_folio_carga_lenta_no_se_da_por_vacio(setup, excel_file):
     d1 = docs(db, job(db, run, "123456789", 1))
     assert d1["FOR"] == [("DESCARGADO", "71")]
     assert d1["ORD"] == [("DESCARGADO", "5"), ("DESCARGADO", "6")]
+
+
+def test_un_check_que_emite_varios_pdfs_se_toman_todos(setup, excel_file):
+    """Un mismo check (p. ej. ÓRDENES MÉDICAS con varias órdenes para un folio) puede generar más de un
+    PDF: antes solo se guardaba el primero y los demás terminaban en cuarentena."""
+    cfg_patch = {"multi_pdf_quiescence_seconds": 0.4}
+    app, db, orch, mailer = setup(pdfs_por_check=2)
+    orch.cfg.raw["hosvital"].update(cfg_patch)
+    run = orch.prepare(excel_file)
+    orch.download(run)
+
+    d1 = docs(db, job(db, run, "123456789", 1))
+    # Dos folios de ORD (5 y 6), cada uno con 2 PDFs = 4 archivos en el staging para este tipo.
+    assert d1["ORD"] == [("DESCARGADO", "5"), ("DESCARGADO", "5"),
+                         ("DESCARGADO", "6"), ("DESCARGADO", "6")]
+    # Formulación también replica (folio 71 x2).
+    assert d1["FOR"] == [("DESCARGADO", "71"), ("DESCARGADO", "71")]
+    # Historia clínica (sin diálogo de folio) también.
+    assert d1["HC"] == [("DESCARGADO", None), ("DESCARGADO", None)]
+
+    # La carpeta de reportes queda limpia y no hay más PDFs en cuarentena de los esperados.
+    assert not list(orch.cfg.path("paths.reports_dir").glob("*.pdf"))
+
+    orch.send(run)
+    adj = next(m for m in mailer.sent if m[0] == "p1@gmail.com")[2]
+    # Nombres de adjuntos únicos (el segundo PDF del mismo tipo+folio lleva sufijo _2).
+    assert len(adj) == len(set(adj))
+    assert "Ordenes_medicas_folio5.pdf" in adj and "Ordenes_medicas_folio5_2.pdf" in adj
+    assert "Ordenes_medicas_folio6.pdf" in adj and "Ordenes_medicas_folio6_2.pdf" in adj
+    assert "Historia_clinica.pdf" in adj and "Historia_clinica_2.pdf" in adj

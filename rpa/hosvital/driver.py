@@ -32,7 +32,7 @@ from ..text import alnum, norm
 from ..types import DocResult, DriverError, PatientResult, SessionExpired
 from . import vision
 from .parsing import (ESTADOS_SESION_PERDIDA, GridRow, RowInfo, bottom_row_by_left, find_item_index,
-                      has_grid_header, is_icon_size, match_layout, month_matches, parse_grid_rows, parse_rango_header,
+                      has_grid_header, is_icon_size, match_layout, parse_grid_rows, parse_rango_header,
                       parse_row, state_from_titles)
 
 
@@ -378,17 +378,16 @@ class HosvitalDriver:
             main.set_focus()
             pwd_edit.type_keys("{ENTER}", set_foreground=True)
 
-    def pick_cycle(self, fecha: date) -> None:
+    def pick_cycle(self) -> None:
+        """Selecciona el último ciclo de la grilla (sin validar fecha): Hosvital permite descargar documentos
+        de cualquier fecha una vez entrado al último ciclo."""
         dlg = self._dialog("CICLO")
         grid = self._grid(dlg)
         self._press(grid, "{END}")
-        if not month_matches(self._row_texts(grid), fecha.year, fecha.month):
+        if not self._row_texts(grid):
             self._press(grid, "{END}", force_focus=True)
-        texts = self._row_texts(grid)
-        if not month_matches(texts, fecha.year, fecha.month):
-            extra = f" Contenido de la grilla: {self._grid_debug(grid)}" if not texts else ""
-            raise DriverError(f"El último ciclo ({[t.strip() for t in texts]}) no corresponde a la fecha "
-                              f"de la cita {fecha:%m/%Y}.{extra}")
+        if not self._row_texts(grid):
+            raise DriverError(f"No se pudo leer la fila del ciclo. Contenido de la grilla: {self._grid_debug(grid)}")
         self._click(self._check_btn(dlg))
         st = self._wait_any({"MENU"}, self.t_dialog, raise_if_lost=False)
         if st == "MENSAJE":
@@ -432,7 +431,7 @@ class HosvitalDriver:
             elif st == "LOGIN":
                 self.login()
             elif st == "CICLO":
-                self.pick_cycle(fecha)
+                self.pick_cycle()
             elif st == "MENU":
                 self.open_sis()
             elif st == "SIS":
